@@ -16,8 +16,10 @@
     "jsonwebtoken": "^8.1.0",
     "logger": "0.0.1",
     "mongoose": "^4.13.9",
+    "mongoose-double": "0.0.1",
     "morgan": "^1.9.0",
     "path": "^0.12.7",
+    "plivo": "^4.0.0",
     "random-js": "^1.0.8"
   }
 }

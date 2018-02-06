@@ -1,5 +1,7 @@
 var mongoose = require('mongoose');
+require('mongoose-double')(mongoose);
 
+var SchemaTypes = mongoose.Schema.Types;
 var codesSchema = new mongoose.Schema({
   toNumber: String,
   status: {type:Boolean, default: true},
@@ -9,9 +11,13 @@ var codesSchema = new mongoose.Schema({
   clientEmail: String,
   clientPass: String,
   initialBalance: Number,
-  balance: Number,
+  balance: {
+    type: SchemaTypes.Double
+  },
   messagesSent: Number,
-  lastDate: Date
+  message: String,
+  lastDate: Date,
+  expirationDate: Date
 });
 
-module.exports = mongoose.model('Codes', codesSchema);
+module.exports = mongoose.model('codes', codesSchema);
