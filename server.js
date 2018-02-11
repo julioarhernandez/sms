@@ -30,29 +30,30 @@ app.post('/sms/', function(request, response) {
   //Sender's number
   var fromNumber = request.body.From || request.query.From;
   var code = request.body.Text || request.query.Text;
-  code = code.toLowerCase();
+  code = code ? code.toLowerCase(): '';
   var err = '';
+  if ( code ){
+    // Find the code in database
+    codes.findOneAndUpdate(
+      { toNumber: toNumber, codeName: code, lastDate: { $gte: new Date()}, status: true, balance: { $gte: 0.04 }},
+      { $inc: { balance: -0.04, messagesSent: 1} },
+      { new: true},
+      function( err, doc){
+        if (doc) {
+            var params = {
+                'src' : toNumber, // Sender's phone number
+                'dst' : fromNumber // Receiver's phone Number
+            };
+            var body = doc.message;
 
-  // Find the code in database
-  codes.findOneAndUpdate(
-    { toNumber: toNumber, codeName: code, lastDate: { $gte: new Date()}, status: true, balance: { $gte: 0.04 }},
-    { $inc: { balance: -0.04, messagesSent: 1} },
-    { new: true},
-    function( err, doc){
-      if (doc) {
-          var params = {
-              'src' : toNumber, // Sender's phone number
-              'dst' : fromNumber // Receiver's phone Number
-          };
-          var body = doc.message;
-
-          var r = plivo.Response();
-          r.addMessage(body, params);
-          response.set({'Content-Type': 'text/xml'});
-          response.end(r.toXML());
-      } 
-    }
-  );
+            var r = plivo.Response();
+            r.addMessage(body, params);
+            response.set({'Content-Type': 'text/xml'});
+            response.end(r.toXML());
+        } 
+      }
+    );
+  }
 });
 
 // Authentication post page 
