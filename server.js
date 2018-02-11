@@ -6,8 +6,10 @@ var logger = require('morgan');
 var bodyParser = require('body-parser');
 var mongoose = require('mongoose');
 var codes = require('./api/models/Model');
+var numbers = require('./api/models/NumbersModel');
 var jwt = require('jsonwebtoken');
 var auth = require ('./api/helpers/authHelpers');
+const ObjectId = require("mongodb").ObjectID;
 
 dotenv.config();
 
@@ -34,26 +36,56 @@ app.post('/sms/', function(request, response) {
   var err = '';
   if ( code ){
     // Find the code in database
-    codes.findOneAndUpdate(
-      { toNumber: toNumber, codeName: code, lastDate: { $gte: new Date()}, status: true, balance: { $gte: 0.04 }},
-      { $inc: { balance: -0.04, messagesSent: 1} },
-      { new: true},
-      function( err, doc){
-        if (doc) {
-            var params = {
-                'src' : toNumber, // Sender's phone number
-                'dst' : fromNumber // Receiver's phone Number
-            };
-            var body = doc.message;
-
-            var r = plivo.Response();
-            r.addMessage(body, params);
-            response.set({'Content-Type': 'text/xml'});
-            response.end(r.toXML());
-        } 
-      }
-    );
+    codes.aggregate([
+      { $unwind: "$codes" },
+      { $match: { 
+                  "status" : true ,
+                  "balance" : {$gte: 0.04},
+                  "lastDate" : { $gte: new Date()},
+                  "codes.codeName": code, 
+                  "codes.toNumber": toNumber 
+                }                        
+      }], function (err, post) {
+              if (err) return next(err);
+              // Get the message variable
+              // and the client id
+              if ( typeof post[0] !== "undefined" ){
+                var message = post[0].codes.message;
+                var cid = post[0]._id;
+                // Decrement the balance and
+                // increment by one messages sent field
+                codes.findOneAndUpdate(
+                    { _id: ObjectId(cid)},
+                    { $inc: { balance: -0.04, messagesSent: 1} },
+                    { new : true},
+                    function( err, doc){
+                      if (doc){
+                      // Save the sender's number
+                      // Find number in database
+                      // Insert from-number, date, code and clientID
+                      numbers.findOneAndUpdate(
+                        { "number": fromNumber },
+                        { $push : { "users": { "_id" : ObjectId(cid), "date" : new Date(), "code" : code}} },
+                        { new : true, upsert: true },function(e, d){
+                          if(d){
+                            //Send the sms
+                              var params = {
+                                'src' : toNumber, // Sender's phone number
+                                'dst' : fromNumber // Receiver's phone Number
+                            };
+                            var body = message;
+                            var r = plivo.Response();
+                            r.addMessage(body, params);
+                            response.set({'Content-Type': 'text/xml'});
+                            response.end(r.toXML());
+                          }
+                        });   
+                    }
+                  });
+              }
+            });
   }
+
 });
 
 // Authentication post page 
@@ -77,20 +109,31 @@ app.post('/sms/add', auth.securedToken, function(req, res, next) {
       res.sendStatus(403);
     }else{
 
-      var objectToInsert = {
-            toNumber: "680-666-6855",
-            codeName: "deal2",
-            clientName: "Pollo-tropical2",
-            clientLogin: "pollot2",
-            clientEmail: "pollo2@pollo.com",
-            clientPass: "PolloDulce1223",
-            initialBalance: 10.00,
-            balance: 10.00,
-            messagesSent: 0,
-            message: "this is the message to send you",
-            lastDate: "2018-02-28",
-            expirationDate: null
-          };
+    var objectToInsert = {
+        clientName: "pollo-tropical2",
+        clientLogin: "pollot2",
+        clientEmail: "pollo2@pollo.com",
+        clientPass: "polloDulce1223",
+        clientAddress: "123sw 23 nw, miami florida, 33124",
+        initialBalance: 10.00,
+        balance: 10.00,
+        messagesSent: 0,
+        lastDate: "2018-02-28",
+        codes: [{
+          toNumber: "16806666855",
+          codeName: "pollo2",
+          message: "this first is the message to send you",
+          messagesSent: 0,
+          expirationDate: null
+        },
+        {
+          toNumber: "16806666855",
+          codeName: "pollo3",
+          message: "this is the second message to send you",
+          messagesSent: 0,
+          expirationDate: null
+        }]
+      };
 
       // Insert into db
       codes.create(objectToInsert, function (err, post) {
